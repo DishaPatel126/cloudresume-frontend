@@ -14,7 +14,25 @@ Resources:
       BucketName: cloudresume-disha-1
       WebsiteConfiguration:
         IndexDocument: index.html
-      AccessControl: PublicRead
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+
+  CloudResumeBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CloudResumeBucket1
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${CloudResumeBucket1.Arn}/*"
+
 
   VisitorCountTable1:
     Type: AWS::DynamoDB::Table
@@ -122,7 +140,7 @@ Resources:
   VisitorLogGroup1:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: /aws/events/VisitorEvents
+      LogGroupName: /aws/events/VisitorEvents1
       RetentionInDays: 7
 
   VisitorUpdateRule1:
@@ -197,13 +215,20 @@ Resources:
         ZipFile: |
           import boto3
           def handler(event, context):
-              s3 = boto3.client('s3')
-              bucket = event['ResourceProperties']['Bucket']
-              index = event['ResourceProperties']['Index']
-              script = event['ResourceProperties']['Script']
-              s3.put_object(Bucket=bucket, Key='index.html', Body=index, ContentType='text/html')
-              s3.put_object(Bucket=bucket, Key='script.js', Body=script, ContentType='application/javascript')
-              return {'PhysicalResourceId': 'S3UploadSuccess'}
+          request_type = event.get("RequestType")
+          if request_type == "Delete":
+              return {"PhysicalResourceId": "S3UploadSuccess"}  # exit cleanly
+
+          # Normal create/update logic
+          s3 = boto3.client("s3")
+          bucket = event["ResourceProperties"]["Bucket"]
+          index = event["ResourceProperties"]["Index"]
+          script = event["ResourceProperties"]["Script"]
+
+          s3.put_object(Bucket=bucket, Key="index.html", Body=index, ContentType="text/html")
+          s3.put_object(Bucket=bucket, Key="script.js", Body=script, ContentType="application/javascript")
+
+          return {"PhysicalResourceId": "S3UploadSuccess"}
 
   UploadToS3:
     Type: Custom::UploadToS3
