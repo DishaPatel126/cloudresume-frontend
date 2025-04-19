@@ -3,15 +3,313 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Disha Patel - Cloud Resume</title>
+  <title>Disha Patel – Cloud Resume</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      min-height: 100%;
+      background: linear-gradient(to bottom, #000000, #1a1a1a);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      color: #fff;
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+      background: transparent;
+    }
+
+    body {
+      font-family: 'Poppins', sans-serif;
+      color: #fff;
+      margin: 0;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      background: transparent;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 2.5rem;
+      padding-bottom: 3rem;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+      animation: fadeIn 1s ease-out;
+    }
+
+    h1 {
+      font-size: 2.4rem;
+      color: #facc15;
+      margin-bottom: 0.25rem;
+    }
+
+    .location {
+      font-size: 1rem;
+      color: #cbd5e1;
+      margin-bottom: 1.5rem;
+    }
+
+    h2 {
+      font-size: 1.4rem;
+      margin-top: 2rem;
+      margin-bottom: 0.5rem;
+      color: #38bdf8;
+      border-bottom: 1px solid #38bdf8;
+      display: inline-block;
+      padding-bottom: 4px;
+      animation: slideIn 0.8s ease-in-out;
+    }
+
+    p, li {
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    ul {
+      margin-top: 0.5rem;
+      padding-left: 1.2rem;
+    }
+
+    .section {
+      margin-bottom: 1.5rem;
+      opacity: 0;
+      transform: translateY(30px);
+      animation: fadeInUp 1s ease forwards;
+    }
+
+    .section:nth-child(2) { animation-delay: 0.2s; }
+    .section:nth-child(3) { animation-delay: 0.4s; }
+    .section:nth-child(4) { animation-delay: 0.6s; }
+    .section:nth-child(5) { animation-delay: 0.8s; }
+
+    .skills-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      list-style: none;
+      padding: 0;
+    }
+
+    .skills-list li {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: #93c5fd;
+      padding: 0.4rem 0.8rem;
+      border-radius: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: transform 0.3s ease, background-color 0.3s ease;
+    }
+
+    .skills-list li:hover {
+      background-color: rgba(255, 255, 255, 0.2);
+      transform: scale(1.1);
+    }
+
+    a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    #visitor-count {
+      font-size: 0.8rem;
+      text-align: center;
+      color: #94a3b8;
+      margin-top: 3rem;
+    }
+
+    .tab-buttons {
+      display: flex;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background-color: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #60a5fa;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s ease, transform 0.2s ease;
+      font-size: 0.95rem;
+    }
+
+    .tab:hover {
+      background-color: rgba(255, 255, 255, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .tab.active {
+      background-color: rgba(255, 255, 255, 0.2);
+      border-color: #38bdf8;
+    }
+
+    .tab-content {
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      padding-top: 1rem;
+    }
+
+    .tab-panel {
+      display: none;
+      padding: 1.2rem;
+      margin-top: 1rem;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+      transition: all 0.4s ease;
+      animation: fadeInTab 0.4s ease-in-out;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .tab-panel p {
+      margin: 0;
+      color: #d1d5db;
+      font-size: 0.95rem;
+      line-height: 1.7;
+    }
+
+
+
+    @keyframes fadeInTab {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+
+    /* Animations */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .container {
+        padding: 1.5rem;
+        padding-bottom: 2rem;
+      }
+
+      h1 {
+        font-size: 1.8rem;
+      }
+    }
+  </style>
 </head>
 <body>
-  <h1>Hello, I'm Disha 👋</h1>
-  <p>This is my cloud-hosted resume!</p>
+  <div class="container">
+    <h1>Disha Patel</h1>
+    <p class="location">📍 Halifax, Nova Scotia, Canada</p>
 
-  <h2>Visitor Count:</h2>
-  <p id="visitor-count">Loading...</p>
+    <div class="section">
+      <h2>About Me</h2>
+      <p>I’m a Computer Science Master's student passionate about building real-world systems with cloud architecture, serverless applications, and scalable full-stack technologies.</p>
+    </div>
+
+    <div class="section">
+      <h2>Skills</h2>
+      <ul class="skills-list">
+        <li>AWS</li>
+        <li>Lambda</li>
+        <li>S3</li>
+        <li>DynamoDB</li>
+        <li>EC2</li>
+        <li>API Gateway</li>
+        <li>CloudWatch</li>
+        <li>Python</li>
+        <li>Flask</li>
+        <li>CloudFormation</li>
+        <li>React</li>
+        <li>Node.js</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Projects</h2>
+      <div class="tab-buttons">
+        <button class="tab active" onclick="showTab('cloudresume')">CloudResume+</button>
+        <button class="tab" onclick="showTab('bugbridge')">BugBridge</button>
+        <button class="tab" onclick="showTab('autosuggest')">Auto-Suggest</button>
+      </div>
+    
+      <div class="tab-content">
+        <div id="cloudresume" class="tab-panel active">
+          <p><strong style="color:#38bdf8;">CloudResume+</strong> – A cloud-native resume hosted on AWS with CI/CD, API Gateway, Lambda, and DynamoDB for real-time visitor tracking.</p>
+        </div>
+        <div id="bugbridge" class="tab-panel">
+          <p><strong style="color:#38bdf8;">BugBridge</strong> – An admin dashboard for managing bug reports with real-time data updates, modular UI, and a scalable backend using Node.js + PostgreSQL.</p>
+        </div>
+        <div id="autosuggest" class="tab-panel">
+          <p><strong style="color:#38bdf8;">Auto-Suggest Engine</strong> – A high-performance CLI tool using Trie and Binary Heap for fast, accurate city name suggestions based on prefix input.</p>
+        </div>
+      </div>
+    </div>
+    
+
+    <div class="section">
+      <h2>Contact</h2>
+      <p>Email: disha.patel@gmail.com<br>
+         GitHub: <a href="https://github.com/DishaPatel126" target="_blank">Checkout my GitHub</a><br>
+      </p>
+    </div>
+
+    <p id="visitor-count">👀 Visitor Count: Loading...</p>
+  </div>
 
   <script src="script.js"></script>
+
 </body>
 </html>

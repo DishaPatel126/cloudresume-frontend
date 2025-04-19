@@ -1,0 +1,468 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudResume+ full stack with Lambda, API Gateway, EC2, S3, DynamoDB, EventBridge, CloudWatch + inline HTML/JS upload.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    Description: EC2 instance type for admin dashboard
+
+Resources:
+  CloudResumeBucket1:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: cloudresume-disha-1
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      AccessControl: PublicRead
+
+  VisitorCountTable1:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: VisitorCount1
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: page
+          AttributeType: S
+      KeySchema:
+        - AttributeName: page
+          KeyType: HASH
+
+  VisitorCounterFunction1:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: VisitorCounterFunction1
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::135722992636:role/LabRole
+      Runtime: python3.9
+      Timeout: 10
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          from decimal import Decimal
+
+          dynamodb = boto3.resource('dynamodb')
+          table = dynamodb.Table('VisitorCount')
+
+          def lambda_handler(event, context):
+              response = table.get_item(Key={'page': 'home'})
+              visits = int(response['Item'].get('visits', 0))
+              visits += 1
+              table.update_item(
+                  Key={'page': 'home'},
+                  UpdateExpression='SET visits = :val1',
+                  ExpressionAttributeValues={':val1': Decimal(visits)}
+              )
+              eventbridge = boto3.client('events', region_name='us-east-1')
+              eventbridge.put_events(
+                  Entries=[{
+                      'Source': 'cloudresume.visitor',
+                      'DetailType': 'VisitorUpdate',
+                      'Detail': '{"page": "home", "status": "updated"}',
+                      'EventBusName': 'default'
+                  }]
+              )
+              try:
+                  cloudwatch = boto3.client('cloudwatch', region_name='us-east-1')
+                  cloudwatch.put_metric_data(
+                      Namespace='CloudResume',
+                      MetricData=[{
+                          'MetricName': 'TotalVisitors',
+                          'Value': visits,
+                          'Unit': 'Count'
+                      }]
+                  )
+              except Exception as e:
+                  print(f"[ERROR] CloudWatch metric failed: {{e}}")
+
+              return {
+                  'statusCode': 200,
+                  'headers': {'Access-Control-Allow-Origin': '*'},
+                  'body': json.dumps({'count': visits})
+              }
+
+  VisitorAPI1:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: VisitorCounterAPI1
+
+  VisitorResource1:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt VisitorAPI1.RootResourceId
+      PathPart: visit
+      RestApiId: !Ref VisitorAPI1
+
+  VisitorMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      AuthorizationType: NONE
+      ResourceId: !Ref VisitorResource1
+      RestApiId: !Ref VisitorAPI1
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VisitorCounterFunction1.Arn}/invocations
+
+  VisitorDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: VisitorMethod
+    Properties:
+      RestApiId: !Ref VisitorAPI1
+
+  VisitorStage1:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      StageName: prod
+      RestApiId: !Ref VisitorAPI1
+      DeploymentId: !Ref VisitorDeployment
+
+  VisitorLogGroup1:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/events/VisitorEvents
+      RetentionInDays: 7
+
+  VisitorUpdateRule1:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: VisitorUpdateRule1
+      EventPattern:
+        source:
+          - "cloudresume.visitor"
+        detail-type:
+          - "VisitorUpdate"
+      Targets:
+        - Arn: !GetAtt VisitorLogGroup1.Arn
+          Id: "LogGroupTarget"
+
+  AdminDashboardSG1:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP and SSH
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 156.34.184.204/32
+
+      # SecurityGroupIngress:
+      #   - IpProtocol: tcp
+      #     FromPort: 22
+      #     ToPort: 22
+      #     CidrIp: 0.0.0.0/0
+      #   - IpProtocol: tcp
+      #     FromPort: 8080
+      #     ToPort: 8080
+      #     CidrIp: 0.0.0.0/0
+
+  AdminDashboardInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: ami-00c39f71452c08778
+      SecurityGroupIds:
+        - !Ref AdminDashboardSG1
+      IamInstanceProfile: LabInstanceProfile
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          yum update -y
+          yum install python3 -y
+          yum install python3-pip -y
+          pip3 install flask boto3
+          mkdir /home/ec2-user/cloudresume-admin
+          cd /home/ec2-user/cloudresume-admin
+          cat <<EOF > app.py
+          from flask import Flask
+          import boto3
+          from decimal import Decimal
+          app = Flask(__name__)
+          dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+          table = dynamodb.Table('VisitorCount')
+          @app.route("/")
+          def show_count():
+              try:
+                  response = table.get_item(Key={{'page': 'home'}})
+                  visits = int(response['Item']['visits'])
+                  return f"<h1>Total Visitors: {{visits}}</h1>"
+              except Exception as e:
+                  return f"<h1>Error</h1><pre>{{str(e)}}</pre>"
+          if __name__ == "__main__":
+              app.run(host="0.0.0.0", port=8080)
+          EOF
+          nohup python3 app.py &
+
+  S3UploadFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: CloudResumeUploader1
+      Handler: index.handler
+      Runtime: python3.9
+      Timeout: 60
+      Role: arn:aws:iam::135722992636:role/LabRole
+      Code:
+        ZipFile: |
+          import boto3
+          def handler(event, context):
+              s3 = boto3.client('s3')
+              bucket = event['ResourceProperties']['Bucket']
+              index = event['ResourceProperties']['Index']
+              script = event['ResourceProperties']['Script']
+              s3.put_object(Bucket=bucket, Key='index.html', Body=index, ContentType='text/html')
+              s3.put_object(Bucket=bucket, Key='script.js', Body=script, ContentType='application/javascript')
+              return {'PhysicalResourceId': 'S3UploadSuccess'}
+
+  UploadToS3:
+    Type: Custom::UploadToS3
+    Properties:
+      ServiceToken: !GetAtt S3UploadFunction.Arn
+      Bucket: !Ref CloudResumeBucket1
+      Index: |
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+          <title>Disha Patel – Cloud Resume</title>
+          <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+          <style>
+            body {{ font-family: 'Poppins', sans-serif; background: linear-gradient(to bottom, #000, #1a1a1a); color: #fff; padding: 2rem; }}
+            .container {{ max-width: 800px; background: rgba(255,255,255,0.06); padding: 2.5rem; border-radius: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.4); }}
+            h1 {{ color: #facc15; font-size: 2.4rem; }}
+            .skills-list {{ display: flex; flex-wrap: wrap; list-style: none; padding: 0; gap: 0.5rem; }}
+            .skills-list li {{ background-color: rgba(255,255,255,0.1); color: #93c5fd; padding: 0.4rem 0.8rem; border-radius: 20px; }}
+            #visitor-count {{ margin-top: 2rem; color: #94a3b8; }}
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>Disha Patel</h1>
+            <p class="location">📍 Halifax, Nova Scotia, Canada</p>
+
+            <div class="section">
+              <h2>About Me</h2>
+              <p>I’m a Computer Science Master's student passionate about building real-world systems with cloud architecture, serverless applications, and scalable full-stack technologies.</p>
+            </div>
+
+            <div class="section">
+              <h2>Skills</h2>
+              <ul class="skills-list">
+                <li>AWS</li><li>Lambda</li><li>S3</li><li>DynamoDB</li><li>EC2</li><li>API Gateway</li>
+                <li>CloudWatch</li><li>Python</li><li>Flask</li><li>CloudFormation</li><li>React</li><li>Node.js</li>
+              </ul>
+            </div>
+
+            <div class="section">
+              <h2>Contact</h2>
+              <p>Email: disha.patel@gmail.com<br>
+              GitHub: <a href="https://github.com/DishaPatel126" target="_blank">Checkout my GitHub</a></p>
+            </div>
+
+            <p id="visitor-count">👀 Visitor Count: Loading...</p>
+          </div>
+
+          <script src="script.js"></script>
+        </body>
+        </html>
+
+      Script: |
+        const countElement = document.getElementById("visitor-count");
+        fetch("https://takkiwnooc.execute-api.us-east-1.amazonaws.com/prod/visit")
+          .then(response => response.json())
+          .then(data => {
+            countElement.textContent = `👀 Visitor Count: ${data.count}`;
+          })
+          .catch(error => {
+            console.error("Error loading count:", error);
+            countElement.textContent = "👀 Visitor Count: error";
+          });
+
+Outputs:
+  ResumeWebsiteURL:
+    Description: URL to access the deployed static resume site
+    Value: !Sub http://${CloudResumeBucket1}.s3-website-${AWS::Region}.amazonaws.com
+
+  VisitAPIURL:
+    Description: Public endpoint of the visitor API
+    Value: !Sub https://${VisitorAPI1}.execute-api.${AWS::Region}.amazonaws.com/prod/visit
+
+
+
+# AWSTemplateFormatVersion: '2010-09-09'
+# Description: CloudResume+ full architecture with Lambda, API Gateway, S3, DynamoDB, EventBridge, CloudWatch, and EC2 dashboard.
+
+# Parameters:
+#   InstanceType:
+#     Type: String
+#     Default: t2.micro
+#     Description: EC2 instance type for admin dashboard
+
+# Resources:
+
+#   CloudResumeBucket1:
+#     Type: AWS::S3::Bucket
+#     Properties:
+#       BucketName: cloudresume-disha-1
+#       WebsiteConfiguration:
+#         IndexDocument: index.html
+#       AccessControl: PublicRead
+
+#   VisitorCountTable1:
+#     Type: AWS::DynamoDB::Table
+#     Properties:
+#       TableName: VisitorCount1
+#       BillingMode: PAY_PER_REQUEST
+#       AttributeDefinitions:
+#         - AttributeName: page
+#           AttributeType: S
+#       KeySchema:
+#         - AttributeName: page
+#           KeyType: HASH
+
+#   VisitorCounterFunction1:
+#     Type: AWS::Lambda::Function
+#     Properties:
+#       FunctionName: VisitorCounterFunction1
+#       Handler: index.lambda_handler
+#       Role: arn:aws:iam::135722992636:role/LabRole
+#       Runtime: python3.9
+#       Timeout: 10
+#       Code:
+#         ZipFile: |
+#           import boto3
+#           import json
+#           from decimal import Decimal
+
+#           dynamodb = boto3.resource('dynamodb')
+#           table = dynamodb.Table('VisitorCount')
+
+#           def lambda_handler(event, context):
+#               response = table.get_item(Key={'page': 'home'})
+#               visits = int(response['Item'].get('visits', 0))
+#               visits += 1
+#               table.update_item(
+#                   Key={'page': 'home'},
+#                   UpdateExpression='SET visits = :val1',
+#                   ExpressionAttributeValues={':val1': Decimal(visits)}
+#               )
+#               eventbridge = boto3.client('events', region_name='us-east-1')
+#               eventbridge.put_events(
+#                   Entries=[{
+#                       'Source': 'cloudresume.visitor',
+#                       'DetailType': 'VisitorUpdate',
+#                       'Detail': '{"page": "home", "status": "updated"}',
+#                       'EventBusName': 'default'
+#                   }]
+#               )
+#               try:
+#                   cloudwatch = boto3.client('cloudwatch', region_name='us-east-1')
+#                   cloudwatch.put_metric_data(
+#                       Namespace='CloudResume',
+#                       MetricData=[{
+#                           'MetricName': 'TotalVisitors',
+#                           'Value': visits,
+#                           'Unit': 'Count'
+#                       }]
+#                   )
+#                   print(f"[METRIC] Sent TotalVisitors={{visits}}")
+#               except Exception as e:
+#                   print(f"[ERROR] CloudWatch metric failed: {{e}}")
+#               return {
+#                   'statusCode': 200,
+#                   'headers': {{'Access-Control-Allow-Origin': '*'}},
+#                   'body': json.dumps({{'count': visits}})
+#               }
+
+#   VisitorAPI1:
+#     Type: AWS::ApiGateway::RestApi
+#     Properties:
+#       Name: VisitorCounterAPI1
+
+#   VisitorResource1:
+#     Type: AWS::ApiGateway::Resource
+#     Properties:
+#       ParentId: !GetAtt VisitorAPI1.RootResourceId
+#       PathPart: visit
+#       RestApiId: !Ref VisitorAPI1
+
+#   VisitorMethod:
+#     Type: AWS::ApiGateway::Method
+#     Properties:
+#       HttpMethod: GET
+#       AuthorizationType: NONE
+#       ResourceId: !Ref VisitorResource1
+#       RestApiId: !Ref VisitorAPI1
+#       Integration:
+#         IntegrationHttpMethod: POST
+#         Type: AWS_PROXY
+#         Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VisitorCounterFunction1.Arn}/invocations
+
+#   VisitorDeployment:
+#     Type: AWS::ApiGateway::Deployment
+#     DependsOn: VisitorMethod
+#     Properties:
+#       RestApiId: !Ref VisitorAPI1
+
+#   VisitorStage1:
+#     Type: AWS::ApiGateway::Stage
+#     Properties:
+#       StageName: prod
+#       RestApiId: !Ref VisitorAPI1
+#       DeploymentId: !Ref VisitorDeployment
+
+#   VisitorLogGroup1:
+#     Type: AWS::Logs::LogGroup
+#     Properties:
+#       LogGroupName: /aws/events/VisitorEvents
+#       RetentionInDays: 7
+
+#   VisitorUpdateRule1:
+#     Type: AWS::Events::Rule
+#     Properties:
+#       Name: VisitorUpdateRule1
+#       EventPattern:
+#         source:
+#           - "cloudresume.visitor"
+#         detail-type:
+#           - "VisitorUpdate"
+#       Targets:
+#         - Arn: !GetAtt VisitorLogGroup1.Arn
+#           Id: "LogGroupTarget"
+
+#   AdminDashboardSG1:
+#     Type: AWS::EC2::SecurityGroup
+#     Properties:
+#       GroupDescription: Allow HTTP and SSH
+#       SecurityGroupIngress:
+#         - IpProtocol: tcp
+#           FromPort: 22
+#           ToPort: 22
+#           CidrIp: 0.0.0.0/0
+#         - IpProtocol: tcp
+#           FromPort: 8080
+#           ToPort: 8080
+#           CidrIp: 0.0.0.0/0
+
+#   AdminDashboardInstance1:
+#     Type: AWS::EC2::Instance
+#     Properties:
+#       InstanceType: !Ref InstanceType
+#       ImageId: ami-00c39f71452c08778
+#       SecurityGroupIds:
+#         - !Ref AdminDashboardSG1
+#       IamInstanceProfile: LabInstanceProfile
+#       UserData:
+#         Fn::Base64: |
+#           [your full admin dashboard Flask script here, escaped properly]
+
+# Outputs:
+#   S3WebsiteURL:
+#     Value: !Sub http://${CloudResumeBucket1}.s3-website-${AWS::Region}.amazonaws.com
+#     Description: URL for static resume site
+
+#   APIGatewayInvokeURL:
+#     Value: !Sub https://${VisitorAPI1}.execute-api.${AWS::Region}.amazonaws.com/prod/visit
+#     Description: API endpoint for visitor count
